@@ -17,6 +17,10 @@ struct CantripGainParams {
     /// gain parameter is stored as linear gain while the values are displayed in decibels.
     #[id = "gain"]
     pub gain: FloatParam,
+
+    /// The pan parameter, range -1.0 to 1.0
+    #[id = "pan"]
+    pub pan: FloatParam,
 }
 
 impl Default for CantripGain {
@@ -53,6 +57,14 @@ impl Default for CantripGainParams {
             // `.with_step_size(0.1)` function to get internal rounding.
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+
+            pan: FloatParam::new(
+                "Pan",
+                0.0,
+                FloatRange::Linear { min: -1.0, max: 1.0 },
+            )
+            .with_smoother(SmoothingStyle::Linear(50.0))
+            .with_unit(""), // No unit for pan, or maybe "%"? Usually just arbitrary.
         }
     }
 }
@@ -125,10 +137,36 @@ impl Plugin for CantripGain {
         for channel_samples in buffer.iter_samples() {
             // Smoothing is optionally built into the parameters themselves
             let gain = self.params.gain.smoothed.next();
+            let pan = self.params.pan.smoothed.next();
 
-            for sample in channel_samples {
-                *sample *= gain;
+            // Equal power panning
+            // pan range [-1.0, 1.0]
+            // angle range [0, PI/2] -> (pan + 1.0) * PI / 4.0
+            let pan_angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+            let pan_l = pan_angle.cos();
+            let pan_r = pan_angle.sin();
+
+            // We assume stereo output.
+            // If input is mono, we might need to handle it, but AUDIO_IO_LAYOUTS says 2 channels.
+            // buffer.iter_samples() yields iterators over channels.
+            // But we need to process L and R differently.
+            // iter_samples yields *frames*? No, let's check docs or usage.
+            // nih-plug docs: buffer.iter_samples() returns an iterator that yields `&mut [f32]`.
+            // The slice length is the number of channels.
+            // So `channel_samples` is effectively `&mut [f32]` where len == num_channels.
+            
+            let samples = channel_samples.into_iter();
+            let mut samples_iter = samples;
+
+            if let (Some(l), Some(r)) = (samples_iter.next(), samples_iter.next()) {
+                let in_l = *l;
+                let in_r = *r;
+
+                *l = in_l * gain * pan_l;
+                *r = in_r * gain * pan_r;
             }
+            // If there are more channels, we ignore them or process them? 
+            // For now, let's assume stereo.
         }
 
         ProcessStatus::Normal
