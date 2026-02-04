@@ -1,3 +1,12 @@
 [workspace]
 members = ["cantrip_gain", "cantrip_gain/xtask"]
 resolver = "2"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"
