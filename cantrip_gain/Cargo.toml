@@ -7,8 +7,6 @@ license = "ISC"
 homepage = "https://github.com/flathill404/grimoire"
 description = "simple gain"
 
-[workspace]
-members = ["xtask"]
 
 [lib]
 crate-type = ["cdylib"]
