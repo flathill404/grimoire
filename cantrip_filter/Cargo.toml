@@ -1,0 +1,20 @@
+[package]
+name = "cantrip_filter"
+version = "0.1.0"
+edition = "2021"
+authors = ["flathill404 <38638577+flathill404@users.noreply.github.com>"]
+license = "ISC"
+homepage = "https://github.com/flathill404/grimoire"
+description = "simple filter"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Remove the `assert_process_allocs` feature to allow allocations on the audio
+# thread in debug builds.
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs"] }
+# Uncomment the below line to disable the on-by-default VST3 feature to remove
+# the GPL compatibility requirement
+# nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", default-features = false, features = ["assert_process_allocs"] }
+
