@@ -11,6 +11,7 @@ This repository serves as a sandbox for trying out various ideas, frameworks, an
 - **cantrip_gain**: A simple gain plugin.
 - **cantrip_filter**: A simple filter plugin.
 - **cantrip_compressor**: A simple compressor plugin.
+- **cantrip_delay**: A simple delay plugin.
 
 ## Usage
 

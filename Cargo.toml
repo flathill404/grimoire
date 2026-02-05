@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cantrip_compressor",
+    "cantrip_delay",
     "cantrip_filter",
     "cantrip_gain",
     "xtask",

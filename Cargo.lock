@@ -105,6 +105,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cantrip_delay"
+version = "0.1.0"
+dependencies = [
+ "nih_plug",
+]
+
+[[package]]
 name = "cantrip_filter"
 version = "0.1.0"
 dependencies = [
