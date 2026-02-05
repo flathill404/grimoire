@@ -78,30 +78,24 @@ impl Plugin for CantripFilter {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        // Prepare gain smoothing for the block
-        // Since parameters are shared, we can calculate the gain curve once.
-        let num_samples = buffer.samples();
-        let mut gain_values = vec![0.0; num_samples];
-        for i in 0..num_samples {
-            gain_values[i] = self.params.gain.smoothed.next();
+        // Update filter coefficients once per block
+        let filter_type = self.params.filter_type.value();
+        let freq = self.params.frequency.value();
+        let q = self.params.resonance.value();
+
+        for filter in &mut self.filters {
+            filter.update(filter_type, freq, q, 0.0, self.sample_rate);
         }
 
-        for (channel_idx, mut channel_samples) in buffer.iter_samples().enumerate() {
-            if channel_idx >= self.filters.len() {
-                break;
-            }
-            let filter = &mut self.filters[channel_idx];
+        // Process sample by sample
+        // iter_samples() iterates per-sample, giving access to all channels for each sample
+        for mut channel_samples in buffer.iter_samples() {
+            let gain = self.params.gain.smoothed.next();
 
-            let filter_type = self.params.filter_type.value();
-            let freq = self.params.frequency.value();
-            let q = self.params.resonance.value();
-            
-            // Note: Filter coefficients are updated once per block. 
-            // For smoother filter modulation, we'd need per-sample or small-block updates.
-            filter.update(filter_type, freq, q, 0.0, self.sample_rate);
-
-            for (sample_idx, sample) in channel_samples.iter_mut().enumerate() {
-                *sample = filter.process(*sample) * gain_values[sample_idx];
+            for (channel_idx, sample) in channel_samples.iter_mut().enumerate() {
+                if channel_idx < self.filters.len() {
+                    *sample = self.filters[channel_idx].process(*sample) * gain;
+                }
             }
         }
 
