@@ -22,6 +22,7 @@ pub struct CantripFilterParams {
 
 #[derive(Enum, PartialEq, Clone, Copy, Debug)]
 pub enum FilterType {
+    // === Basic Filters (12dB/oct) ===
     #[name = "Low Pass"]
     LowPass,
     #[name = "High Pass"]
@@ -32,12 +33,58 @@ pub enum FilterType {
     Notch,
     #[name = "All Pass"]
     AllPass,
+
+    // === Gentle Slope (6dB/oct) ===
+    #[name = "Low Pass 6dB"]
+    LowPass6dB,
+    #[name = "High Pass 6dB"]
+    HighPass6dB,
+
+    // === EQ Types ===
     #[name = "Peaking EQ"]
     Peaking,
     #[name = "Low Shelf"]
     LowShelf,
     #[name = "High Shelf"]
     HighShelf,
+    #[name = "Tilt"]
+    Tilt,
+
+    // === Crossover (Linkwitz-Riley) ===
+    #[name = "LR Low Pass"]
+    LinkwitzRileyLP,
+    #[name = "LR High Pass"]
+    LinkwitzRileyHP,
+
+    // === Butterworth (maximally flat) ===
+    #[name = "Butterworth LP"]
+    ButterworthLP,
+    #[name = "Butterworth HP"]
+    ButterworthHP,
+
+    // === Band Pass Variations ===
+    #[name = "Band Pass 0dB"]
+    BandPass0dB,
+
+    // === Character / Creative ===
+    #[name = "Warmth"]
+    Warmth,
+    #[name = "Brightness"]
+    Brightness,
+    #[name = "Presence"]
+    Presence,
+    #[name = "Air"]
+    Air,
+    #[name = "Sub Bass"]
+    SubBass,
+    #[name = "Vocal"]
+    Vocal,
+
+    // === Utility ===
+    #[name = "DC Block"]
+    DCBlock,
+    #[name = "Unity"]
+    Unity,
 }
 
 impl Default for CantripFilterParams {
