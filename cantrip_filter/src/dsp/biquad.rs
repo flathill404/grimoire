@@ -26,12 +26,13 @@ impl Biquad {
         self.y2 = 0.0;
     }
 
-    pub fn update(&mut self, filter_type: FilterType, freq: f32, q: f32, _gain_db: f32, sample_rate: f32) {
+    pub fn update(&mut self, filter_type: FilterType, freq: f32, q: f32, gain_db: f32, sample_rate: f32) {
         let w0 = 2.0 * PI * freq / sample_rate;
         let cos_w0 = w0.cos();
         let sin_w0 = w0.sin();
         let alpha = sin_w0 / (2.0 * q);
-        // let a = 10.0f32.powf(gain_db / 40.0); // For peaking/shelving - unused for now
+        // A for peaking and shelving EQ
+        let a = 10.0f32.powf(gain_db / 40.0);
 
         let (b0, b1, b2, a0, a1, a2) = match filter_type {
             FilterType::LowPass => {
@@ -59,6 +60,53 @@ impl Biquad {
                 let a0 = 1.0 + alpha;
                 let a1 = -2.0 * cos_w0;
                 let a2 = 1.0 - alpha;
+                (b0, b1, b2, a0, a1, a2)
+            }
+            FilterType::Notch => {
+                let b0 = 1.0;
+                let b1 = -2.0 * cos_w0;
+                let b2 = 1.0;
+                let a0 = 1.0 + alpha;
+                let a1 = -2.0 * cos_w0;
+                let a2 = 1.0 - alpha;
+                (b0, b1, b2, a0, a1, a2)
+            }
+            FilterType::AllPass => {
+                let b0 = 1.0 - alpha;
+                let b1 = -2.0 * cos_w0;
+                let b2 = 1.0 + alpha;
+                let a0 = 1.0 + alpha;
+                let a1 = -2.0 * cos_w0;
+                let a2 = 1.0 - alpha;
+                (b0, b1, b2, a0, a1, a2)
+            }
+            FilterType::Peaking => {
+                let b0 = 1.0 + alpha * a;
+                let b1 = -2.0 * cos_w0;
+                let b2 = 1.0 - alpha * a;
+                let a0 = 1.0 + alpha / a;
+                let a1 = -2.0 * cos_w0;
+                let a2 = 1.0 - alpha / a;
+                (b0, b1, b2, a0, a1, a2)
+            }
+            FilterType::LowShelf => {
+                let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
+                let b0 = a * ((a + 1.0) - (a - 1.0) * cos_w0 + two_sqrt_a_alpha);
+                let b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * cos_w0);
+                let b2 = a * ((a + 1.0) - (a - 1.0) * cos_w0 - two_sqrt_a_alpha);
+                let a0 = (a + 1.0) + (a - 1.0) * cos_w0 + two_sqrt_a_alpha;
+                let a1 = -2.0 * ((a - 1.0) + (a + 1.0) * cos_w0);
+                let a2 = (a + 1.0) + (a - 1.0) * cos_w0 - two_sqrt_a_alpha;
+                (b0, b1, b2, a0, a1, a2)
+            }
+            FilterType::HighShelf => {
+                let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
+                let b0 = a * ((a + 1.0) + (a - 1.0) * cos_w0 + two_sqrt_a_alpha);
+                let b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cos_w0);
+                let b2 = a * ((a + 1.0) + (a - 1.0) * cos_w0 - two_sqrt_a_alpha);
+                let a0 = (a + 1.0) - (a - 1.0) * cos_w0 + two_sqrt_a_alpha;
+                let a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cos_w0);
+                let a2 = (a + 1.0) - (a - 1.0) * cos_w0 - two_sqrt_a_alpha;
                 (b0, b1, b2, a0, a1, a2)
             }
         };

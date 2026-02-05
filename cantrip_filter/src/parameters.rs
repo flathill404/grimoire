@@ -11,6 +11,11 @@ pub struct CantripFilterParams {
     #[id = "q"]
     pub resonance: FloatParam,
 
+    /// Filter gain for Peaking EQ, Low Shelf, and High Shelf (in dB)
+    #[id = "filter_gain"]
+    pub filter_gain: FloatParam,
+
+    /// Output gain
     #[id = "gain"]
     pub gain: FloatParam,
 }
@@ -23,6 +28,16 @@ pub enum FilterType {
     HighPass,
     #[name = "Band Pass"]
     BandPass,
+    #[name = "Notch"]
+    Notch,
+    #[name = "All Pass"]
+    AllPass,
+    #[name = "Peaking EQ"]
+    Peaking,
+    #[name = "Low Shelf"]
+    LowShelf,
+    #[name = "High Shelf"]
+    HighShelf,
 }
 
 impl Default for CantripFilterParams {
@@ -50,6 +65,16 @@ impl Default for CantripFilterParams {
                 },
             )
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            filter_gain: FloatParam::new(
+                "Filter Gain",
+                0.0,
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
             gain: FloatParam::new(
                 "Gain",
                 util::db_to_gain(0.0),

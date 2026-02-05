@@ -82,9 +82,10 @@ impl Plugin for CantripFilter {
         let filter_type = self.params.filter_type.value();
         let freq = self.params.frequency.value();
         let q = self.params.resonance.value();
+        let filter_gain = self.params.filter_gain.value();
 
         for filter in &mut self.filters {
-            filter.update(filter_type, freq, q, 0.0, self.sample_rate);
+            filter.update(filter_type, freq, q, filter_gain, self.sample_rate);
         }
 
         // Process sample by sample
