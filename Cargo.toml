@@ -2,7 +2,7 @@
 members = [
     "cantrip_filter",
     "cantrip_gain",
-    "cantrip_gain/xtask",
+    "xtask",
 ]
 resolver = "2"
 
