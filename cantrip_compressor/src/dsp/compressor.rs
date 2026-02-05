@@ -7,7 +7,6 @@ use super::envelope::EnvelopeFollower;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Compressor {
     envelope: EnvelopeFollower,
-    gain_reduction_db: f32,
 }
 
 impl Compressor {
@@ -18,7 +17,6 @@ impl Compressor {
     /// Reset the compressor state.
     pub fn reset(&mut self) {
         self.envelope.reset();
-        self.gain_reduction_db = 0.0;
     }
 
     /// Update the envelope follower timing.
@@ -85,14 +83,9 @@ impl Compressor {
         };
 
         // Compute gain reduction
-        self.gain_reduction_db = Self::compute_gain_reduction(input_db, threshold_db, ratio, knee_db);
+        let gain_reduction_db = Self::compute_gain_reduction(input_db, threshold_db, ratio, knee_db);
 
         // Convert back to linear gain
-        10.0f32.powf(self.gain_reduction_db / 20.0)
-    }
-
-    /// Get the current gain reduction in dB.
-    pub fn gain_reduction_db(&self) -> f32 {
-        self.gain_reduction_db
+        10.0f32.powf(gain_reduction_db / 20.0)
     }
 }

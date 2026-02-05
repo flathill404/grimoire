@@ -19,10 +19,6 @@ impl Default for EnvelopeFollower {
 }
 
 impl EnvelopeFollower {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Reset the envelope state.
     pub fn reset(&mut self) {
         self.envelope = 0.0;
@@ -61,11 +57,6 @@ impl EnvelopeFollower {
             self.envelope = 0.0;
         }
 
-        self.envelope
-    }
-
-    /// Get the current envelope level without processing.
-    pub fn current(&self) -> f32 {
         self.envelope
     }
 }
