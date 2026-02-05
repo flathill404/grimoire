@@ -8,7 +8,9 @@ This repository serves as a sandbox for trying out various ideas, frameworks, an
 
 ## Projects
 
-- **cantrip_gain**: A simple gain plugin example.
+- **cantrip_gain**: A simple gain plugin.
+- **cantrip_filter**: A simple filter plugin.
+- **cantrip_compressor**: A simple compressor plugin.
 
 ## Usage
 
