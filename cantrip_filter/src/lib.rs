@@ -1,28 +1,133 @@
 use nih_plug::prelude::*;
+use std::f32::consts::PI;
 use std::sync::Arc;
-
-// This is a shortened version of the gain example with most comments removed, check out
-// https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
-// started
 
 struct CantripFilter {
     params: Arc<CantripFilterParams>,
+    // Stereo filter state
+    filters: [Biquad; 2],
+    sample_rate: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct Biquad {
+    a1: f32,
+    a2: f32,
+    b0: f32,
+    b1: f32,
+    b2: f32,
+    x1: f32,
+    x2: f32,
+    y1: f32,
+    y2: f32,
+}
+
+impl Biquad {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn reset(&mut self) {
+        self.x1 = 0.0;
+        self.x2 = 0.0;
+        self.y1 = 0.0;
+        self.y2 = 0.0;
+    }
+
+    fn update(&mut self, filter_type: FilterType, freq: f32, q: f32, _gain_db: f32, sample_rate: f32) {
+        let w0 = 2.0 * PI * freq / sample_rate;
+        let cos_w0 = w0.cos();
+        let sin_w0 = w0.sin();
+        let alpha = sin_w0 / (2.0 * q);
+        // let a = 10.0f32.powf(gain_db / 40.0); // For peaking/shelving - unused for now
+
+        let (b0, b1, b2, a0, a1, a2) = match filter_type {
+            FilterType::LowPass => {
+                let b0 = (1.0 - cos_w0) / 2.0;
+                let b1 = 1.0 - cos_w0;
+                let b2 = (1.0 - cos_w0) / 2.0;
+                let a0 = 1.0 + alpha;
+                let a1 = -2.0 * cos_w0;
+                let a2 = 1.0 - alpha;
+                (b0, b1, b2, a0, a1, a2)
+            }
+            FilterType::HighPass => {
+                let b0 = (1.0 + cos_w0) / 2.0;
+                let b1 = -(1.0 + cos_w0);
+                let b2 = (1.0 + cos_w0) / 2.0;
+                let a0 = 1.0 + alpha;
+                let a1 = -2.0 * cos_w0;
+                let a2 = 1.0 - alpha;
+                (b0, b1, b2, a0, a1, a2)
+            }
+            FilterType::BandPass => {
+                let b0 = alpha;
+                let b1 = 0.0;
+                let b2 = -alpha;
+                let a0 = 1.0 + alpha;
+                let a1 = -2.0 * cos_w0;
+                let a2 = 1.0 - alpha;
+                (b0, b1, b2, a0, a1, a2)
+            }
+        };
+
+        // Normalize
+        let inv_a0 = 1.0 / a0;
+        self.b0 = b0 * inv_a0;
+        self.b1 = b1 * inv_a0;
+        self.b2 = b2 * inv_a0;
+        self.a1 = a1 * inv_a0;
+        self.a2 = a2 * inv_a0;
+    }
+
+    fn process(&mut self, input: f32) -> f32 {
+        let output = self.b0 * input + self.b1 * self.x1 + self.b2 * self.x2
+            - self.a1 * self.y1
+            - self.a2 * self.y2;
+
+        // Denormal protection (optional but good practice)
+        // if output.abs() < 1e-10 { output = 0.0; }
+
+        self.x2 = self.x1;
+        self.x1 = input;
+        self.y2 = self.y1;
+        self.y1 = output;
+
+        output
+    }
 }
 
 #[derive(Params)]
 struct CantripFilterParams {
-    /// The parameter's ID is used to identify the parameter in the wrappred plugin API. As long as
-    /// these IDs remain constant, you can rename and reorder these fields as you wish. The
-    /// parameters are exposed to the host in the same order they were defined. In this case, this
-    /// gain parameter is stored as linear gain while the values are displayed in decibels.
+    #[id = "type"]
+    pub filter_type: EnumParam<FilterType>,
+
+    #[id = "freq"]
+    pub frequency: FloatParam,
+
+    #[id = "q"]
+    pub resonance: FloatParam,
+
     #[id = "gain"]
     pub gain: FloatParam,
+}
+
+#[derive(Enum, PartialEq, Clone, Copy, Debug)]
+pub enum FilterType {
+    #[name = "Low Pass"]
+    LowPass,
+    #[name = "High Pass"]
+    HighPass,
+    #[name = "Band Pass"]
+    BandPass,
 }
 
 impl Default for CantripFilter {
     fn default() -> Self {
         Self {
             params: Arc::new(CantripFilterParams::default()),
+            filters: [Biquad::new(); 2],
+            sample_rate: 44100.0,
         }
     }
 }
@@ -30,27 +135,39 @@ impl Default for CantripFilter {
 impl Default for CantripFilterParams {
     fn default() -> Self {
         Self {
-            // This gain is stored as linear gain. NIH-plug comes with useful conversion functions
-            // to treat these kinds of parameters as if we were dealing with decibels. Storing this
-            // as decibels is easier to work with, but requires a conversion for every sample.
+            filter_type: EnumParam::new("Type", FilterType::LowPass),
+            frequency: FloatParam::new(
+                "Frequency",
+                1000.0,
+                FloatRange::Skewed {
+                    min: 20.0,
+                    max: 20000.0,
+                    factor: FloatRange::skew_factor(2.0),
+                },
+            )
+            .with_unit(" Hz")
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            resonance: FloatParam::new(
+                "Resonance",
+                0.707,
+                FloatRange::Skewed {
+                    min: 0.1,
+                    max: 10.0,
+                    factor: FloatRange::skew_factor(0.5),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
             gain: FloatParam::new(
                 "Gain",
                 util::db_to_gain(0.0),
                 FloatRange::Skewed {
                     min: util::db_to_gain(-30.0),
                     max: util::db_to_gain(30.0),
-                    // This makes the range appear as if it was linear when displaying the values as
-                    // decibels
                     factor: FloatRange::gain_skew_factor(-30.0, 30.0),
                 },
             )
-            // Because the gain parameter is stored as linear gain instead of storing the value as
-            // decibels, we need logarithmic smoothing
             .with_smoother(SmoothingStyle::Logarithmic(50.0))
             .with_unit(" dB")
-            // There are many predefined formatters we can use here. If the gain was stored as
-            // decibels instead of as a linear gain value, we could have also used the
-            // `.with_step_size(0.1)` function to get internal rounding.
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
         }
@@ -62,37 +179,18 @@ impl Plugin for CantripFilter {
     const VENDOR: &'static str = "flathill404";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
     const EMAIL: &'static str = "38638577+flathill404@users.noreply.github.com";
-
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-    // The first audio IO layout is used as the default. The other layouts may be selected either
-    // explicitly or automatically by the host or the user depending on the plugin API/backend.
     const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
         main_input_channels: NonZeroU32::new(2),
         main_output_channels: NonZeroU32::new(2),
-
         aux_input_ports: &[],
         aux_output_ports: &[],
-
-        // Individual ports and the layout as a whole can be named here. By default these names
-        // are generated as needed. This layout will be called 'Stereo', while a layout with
-        // only one input and output channel would be called 'Mono'.
         names: PortNames::const_default(),
     }];
-
-
     const MIDI_INPUT: MidiConfig = MidiConfig::None;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
-
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
-
-    // If the plugin can send or receive SysEx messages, it can define a type to wrap around those
-    // messages here. The type implements the `SysExMessage` trait, which allows conversion to and
-    // from plain byte buffers.
     type SysExMessage = ();
-    // More advanced plugins can use this to run expensive background tasks. See the field's
-    // documentation for more information. `()` means that the plugin does not have any background
-    // tasks.
     type BackgroundTask = ();
 
     fn params(&self) -> Arc<dyn Params> {
@@ -102,18 +200,20 @@ impl Plugin for CantripFilter {
     fn initialize(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
-        _buffer_config: &BufferConfig,
+        buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
-        // Resize buffers and perform other potentially expensive initialization operations here.
-        // The `reset()` function is always called right after this function. You can remove this
-        // function if you do not need it.
+        self.sample_rate = buffer_config.sample_rate;
+        for filter in &mut self.filters {
+            filter.reset();
+        }
         true
     }
 
     fn reset(&mut self) {
-        // Reset buffers and envelopes here. This can be called from the audio thread and may not
-        // allocate. You can remove this function if you do not need it.
+        for filter in &mut self.filters {
+            filter.reset();
+        }
     }
 
     fn process(
@@ -122,12 +222,28 @@ impl Plugin for CantripFilter {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        for channel_samples in buffer.iter_samples() {
-            // Smoothing is optionally built into the parameters themselves
-            let gain = self.params.gain.smoothed.next();
+        for (channel_idx, channel_samples) in buffer.iter_samples().enumerate() {
+            // Safety: We only support stereo, so channel_idx will be 0 or 1.
+            // But to be safe in case of other partial layouts, we'll check bounds.
+            if channel_idx >= self.filters.len() {
+                break;
+            }
+            let filter = &mut self.filters[channel_idx];
+
+            let filter_type = self.params.filter_type.value();
+            let freq = self.params.frequency.value();
+            let q = self.params.resonance.value();
+            let gain = self.params.gain.value(); // Linear gain for output
+
+            // Update coefficients
+            // Note: For sample-accurate automation, we should do this per-sample or per-block
+            // but for simplicity here we do it once per block.
+            // Also notice I'm NOT using the gain parameter for the filter EQ yet (Peaking/Shelving),
+            // just low/high/band pass for now.
+            filter.update(filter_type, freq, q, 0.0, self.sample_rate);
 
             for sample in channel_samples {
-                *sample *= gain;
+                *sample = filter.process(*sample) * gain;
             }
         }
 
@@ -137,20 +253,16 @@ impl Plugin for CantripFilter {
 
 impl ClapPlugin for CantripFilter {
     const CLAP_ID: &'static str = "com.flathill404.grimoire.cantrip_filter";
-    const CLAP_DESCRIPTION: Option<&'static str> = Some("simple filter");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some("Simple Biquad Filter");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
-
-    // Don't forget to change these features
-    const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect, ClapFeature::Stereo];
+    const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect, ClapFeature::Filter, ClapFeature::Stereo];
 }
 
 impl Vst3Plugin for CantripFilter {
     const VST3_CLASS_ID: [u8; 16] = *b"hCfVdKlz609eczKi";
-
-    // And also don't forget to change these categories
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
-        &[Vst3SubCategory::Fx, Vst3SubCategory::Dynamics];
+        &[Vst3SubCategory::Fx, Vst3SubCategory::Filter];
 }
 
 nih_export_clap!(CantripFilter);
