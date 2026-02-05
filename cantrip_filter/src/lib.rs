@@ -81,12 +81,15 @@ impl Biquad {
     }
 
     fn process(&mut self, input: f32) -> f32 {
-        let output = self.b0 * input + self.b1 * self.x1 + self.b2 * self.x2
+        let mut output = self.b0 * input + self.b1 * self.x1 + self.b2 * self.x2
             - self.a1 * self.y1
             - self.a2 * self.y2;
 
-        // Denormal protection (optional but good practice)
-        // if output.abs() < 1e-10 { output = 0.0; }
+        // Anti-denormal / Flush-to-zero
+        // This prevents CPU spikes and potential noise when the signal decays to very small values.
+        if output.abs() < 1e-11 {
+            output = 0.0;
+        }
 
         self.x2 = self.x1;
         self.x1 = input;
@@ -222,9 +225,20 @@ impl Plugin for CantripFilter {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        for (channel_idx, channel_samples) in buffer.iter_samples().enumerate() {
-            // Safety: We only support stereo, so channel_idx will be 0 or 1.
-            // But to be safe in case of other partial layouts, we'll check bounds.
+        // Prepare gain smoothing for the block
+        // Since parameters are shared, we can calculate the gain curve once.
+        // However, `smoothed.next()` advances the state. If we call it for each channel loop,
+        // it would advance twice as fast if we are naive.
+        // NIH-plug's `Buffer` stores channels separately.
+        // Correct approach: Collect gain values into a temporary buffer for the block size,
+        // then reuse it for each channel.
+        let num_samples = buffer.samples();
+        let mut gain_values = vec![0.0; num_samples];
+        for i in 0..num_samples {
+            gain_values[i] = self.params.gain.smoothed.next();
+        }
+
+        for (channel_idx, mut channel_samples) in buffer.iter_samples().enumerate() {
             if channel_idx >= self.filters.len() {
                 break;
             }
@@ -233,17 +247,13 @@ impl Plugin for CantripFilter {
             let filter_type = self.params.filter_type.value();
             let freq = self.params.frequency.value();
             let q = self.params.resonance.value();
-            let gain = self.params.gain.value(); // Linear gain for output
-
-            // Update coefficients
-            // Note: For sample-accurate automation, we should do this per-sample or per-block
-            // but for simplicity here we do it once per block.
-            // Also notice I'm NOT using the gain parameter for the filter EQ yet (Peaking/Shelving),
-            // just low/high/band pass for now.
+            
+            // Note: Filter coefficients are updated once per block. 
+            // For smoother filter modulation, we'd need per-sample or small-block updates.
             filter.update(filter_type, freq, q, 0.0, self.sample_rate);
 
-            for sample in channel_samples {
-                *sample = filter.process(*sample) * gain;
+            for (sample_idx, sample) in channel_samples.iter_mut().enumerate() {
+                *sample = filter.process(*sample) * gain_values[sample_idx];
             }
         }
 
