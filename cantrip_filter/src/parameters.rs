@@ -35,7 +35,7 @@ impl Default for CantripFilterParams {
                 FloatRange::Skewed {
                     min: 20.0,
                     max: 20000.0,
-                    factor: FloatRange::skew_factor(2.0),
+                    factor: FloatRange::skew_factor(-2.0),
                 },
             )
             .with_unit(" Hz")
